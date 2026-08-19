@@ -25,3 +25,4 @@ class User(Base):
 
     patient = relationship("Patient", back_populates="user", uselist=False)
     doctor = relationship("Doctor", back_populates="user", uselist=False)
+    admin = relationship("Admin", back_populates="user", uselist=False)

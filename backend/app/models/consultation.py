@@ -29,3 +29,9 @@ class Consultation(Base):
 
     patient = relationship("Patient", back_populates="consultations")
     doctor = relationship("Doctor", back_populates="consultations")
+    screening = relationship("Screening", back_populates="consultation", uselist=False)
+    payments = relationship("Payment", back_populates="consultation")
+    note = relationship("ConsultationNote", back_populates="consultation", uselist=False)
+    prescription = relationship("Prescription", back_populates="consultation", uselist=False)
+    follow_up = relationship("FollowUp", back_populates="consultation", uselist=False)
+    referral = relationship("Referral", back_populates="consultation", uselist=False)
