@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: tj_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tj_user
+      POSTGRES_PASSWORD: tj_dev_password
+      POSTGRES_DB: telemedicine_jiwa
+    ports:
+      - "5432:5432"
+    volumes:
+      - tj_pgdata:/var/lib/postgresql/data
+
+volumes:
+  tj_pgdata:
