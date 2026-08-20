@@ -35,3 +35,5 @@ class Consultation(Base):
     prescription = relationship("Prescription", back_populates="consultation", uselist=False)
     follow_up = relationship("FollowUp", back_populates="consultation", uselist=False)
     referral = relationship("Referral", back_populates="consultation", uselist=False)
+    notifications = relationship("Notification", back_populates="consultation")
+    chat_messages = relationship("ChatMessage", back_populates="consultation")

@@ -9,3 +9,4 @@ from app.models.consultation_note import ConsultationNote
 from app.models.prescription import Prescription, PrescriptionItem
 from app.models.follow_up import FollowUp
 from app.models.referral import Referral
+from app.models.notification import Notification, NotificationStatus

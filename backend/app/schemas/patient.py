@@ -1,7 +1,8 @@
-# app/schemas/patient.py
 from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
+from pydantic import field_validator
+from app.core.phone import normalize_indonesian_phone
 
 
 class PatientRegisterRequest(BaseModel):
@@ -9,6 +10,11 @@ class PatientRegisterRequest(BaseModel):
     password: str = Field(min_length=8)
     full_name: str = Field(min_length=1, max_length=255)
     phone_number: str = Field(min_length=8, max_length=20)
+
+    @field_validator("phone_number")
+    @classmethod
+    def normalize_phone(cls, v: str) -> str:
+        return normalize_indonesian_phone(v)
 
 
 class PatientResponse(BaseModel):
