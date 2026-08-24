@@ -11,6 +11,13 @@ class PaymentResponse(BaseModel):
     status: str
     uploaded_at: datetime
 
+
+class PaymentInstructionsResponse(BaseModel):
+    consultation_id: int
+    amount: Decimal
+    consultation_status: str
+
+
 class PaymentQueueItem(BaseModel):
     payment_id: int
     consultation_id: int    
@@ -23,4 +30,4 @@ class PaymentDecisionResponse(BaseModel):
     payment_id: int
     status: str
     verified_at: datetime
-    whatsapp_link: str
+    whatsapp_link: str | None = None

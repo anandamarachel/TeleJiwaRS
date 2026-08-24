@@ -72,6 +72,7 @@ def list_my_consultations(
         ConsultationSummary(
             id=c.id,
             status=c.status.value,
+            screening_submitted=c.screening is not None,
             doctor_name=d.full_name if d else None,
             created_at=c.created_at,
             completed_at=c.completed_at,

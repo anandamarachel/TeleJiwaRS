@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 from app.core.config import settings
 
 import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -17,16 +17,18 @@ security_scheme = HTTPBearer()
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
+    request: Request,
     db: Session = Depends(get_db),
 ) -> User:
-    token = credentials.credentials
+    token = request.cookies.get("access_token")
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if token is None:
+        raise credentials_exception
 
     try:
         payload = decode_access_token(token)
@@ -34,11 +36,7 @@ def get_current_user(
         if user_id is None:
             raise credentials_exception
     except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
     except jwt.InvalidTokenError:
         raise credentials_exception
 

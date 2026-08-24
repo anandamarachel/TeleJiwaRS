@@ -13,6 +13,7 @@ from app.models.consultation import Consultation, ConsultationStatus
 from app.core.config import settings
 from app.models.chat_message import ChatMessage
 from app.schemas.chat import ChatMessageResponse
+from app.core.email import send_admin_payment_notification
 
 
 import os
@@ -21,7 +22,7 @@ import uuid
 from fastapi import UploadFile, File
 
 from app.models.payment import Payment, PaymentStatus
-from app.schemas.payment import PaymentResponse
+from app.schemas.payment import PaymentInstructionsResponse, PaymentResponse
 
 
 router = APIRouter(prefix="/consultations", tags=["consultations"])
@@ -32,6 +33,21 @@ def start_consultation(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.PATIENT)),
 ):
+    existing = (
+        db.query(Consultation)
+        .filter(
+            Consultation.patient_id == current_user.patient.id,
+            Consultation.status != ConsultationStatus.COMPLETED,
+        )
+        .first()
+    )
+
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Anda sudah memiliki konsultasi yang sedang berjalan",
+        )
+
     consultation = Consultation(patient_id=current_user.patient.id)
     db.add(consultation)
     db.commit()
@@ -120,6 +136,39 @@ ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
+@router.get("/{consultation_id}/payment-instructions", response_model=PaymentInstructionsResponse)
+def get_payment_instructions(
+    consultation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.PATIENT)),
+):
+    consultation = db.query(Consultation).filter(Consultation.id == consultation_id).first()
+
+    if consultation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consultation not found")
+
+    if consultation.patient_id != current_user.patient.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your consultation")
+
+    if consultation.screening is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Complete screening before viewing payment instructions",
+        )
+
+    if consultation.status not in (ConsultationStatus.SCREENING, ConsultationStatus.PAYMENT_REJECTED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Payment is not available in the consultation's current state",
+        )
+
+    return PaymentInstructionsResponse(
+        consultation_id=consultation.id,
+        amount=settings.consultation_fee,
+        consultation_status=consultation.status.value,
+    )
+
+
 @router.post("/{consultation_id}/payment", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_payment_proof(
     consultation_id: int,
@@ -176,6 +225,11 @@ async def upload_payment_proof(
     consultation.status = ConsultationStatus.PAYMENT_PENDING
     db.commit()
     db.refresh(payment)
+
+    send_admin_payment_notification(
+        consultation_id=consultation.id,
+        patient_name=current_user.patient.full_name,
+    )
 
     return PaymentResponse(
         id=payment.id,

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class ConsultationSummary(BaseModel):
     id: int
     status: str
+    screening_submitted: bool
     doctor_name: str | None
     created_at: datetime
     completed_at: datetime | None

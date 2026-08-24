@@ -9,6 +9,7 @@ from app.api.doctor import router as doctor_router
 from app.api.chat import router as chat_router
 
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
 
 app = FastAPI(title="Telemedicine Jiwa")
 

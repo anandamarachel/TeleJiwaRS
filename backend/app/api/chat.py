@@ -13,14 +13,20 @@ router = APIRouter(tags=["chat"])
 
 
 @router.websocket("/ws/consultations/{consultation_id}")
-async def chat_endpoint(websocket: WebSocket, consultation_id: int, token: str = Query(...)):
+async def chat_endpoint(websocket: WebSocket, consultation_id: int,):
     db: Session = SessionLocal()
+
+    token = websocket.cookies.get("access_token")
+    if token is None:
+        await websocket.close(code=1008)
+        db.close()
+        return
 
     try:
         payload = decode_access_token(token)
         user_id = int(payload["sub"])
     except (jwt.InvalidTokenError, jwt.ExpiredSignatureError, KeyError):
-        await websocket.close(code=1008)  # policy violation
+        await websocket.close(code=1008)
         db.close()
         return
 

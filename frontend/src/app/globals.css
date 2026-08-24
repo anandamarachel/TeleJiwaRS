@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-sage-50: #F3F6F1;
+  --color-sage-100: #E5EDE1;
+  --color-sage-200: #C8DBC0;
+
+  --color-jade-500: #3D7A68;
+  --color-jade-600: #2F6153;
+  --color-jade-700: #234A3F;
+
+  --color-ink-700: #232B23;
+  --color-ink-900: #141813;
+
+  --color-clay-400: #E0A98A;
+  --color-clay-500: #D98B5F;
+}
+
+body {
+  background-color: var(--color-sage-50);
+  color: var(--color-ink-900);
+}
