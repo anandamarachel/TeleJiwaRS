@@ -1,5 +1,15 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+export function getWebSocketUrl(path: string): string {
+  if (!API_URL) {
+    throw new Error("NEXT_PUBLIC_API_URL is not configured");
+  }
+
+  const url = new URL(path, API_URL);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
+
 export class ApiError extends Error {
   status: number;
   detail: string;

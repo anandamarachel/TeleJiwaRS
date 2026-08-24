@@ -1,4 +1,4 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -60,6 +60,11 @@ async def chat_endpoint(websocket: WebSocket, consultation_id: int,):
             if not text:
                 continue
 
+            db.refresh(consultation, attribute_names=["status"])
+            if consultation.status != ConsultationStatus.ACTIVE:
+                await websocket.close(code=1008, reason="Consultation is no longer active")
+                break
+
             chat_message = ChatMessage(
                 consultation_id=consultation_id,
                 sender_user_id=user.id,
@@ -75,6 +80,7 @@ async def chat_endpoint(websocket: WebSocket, consultation_id: int,):
                 "sent_at": chat_message.sent_at.isoformat(),
             })
     except WebSocketDisconnect:
-        manager.disconnect(consultation_id, websocket)
+        pass
     finally:
+        manager.disconnect(consultation_id, websocket)
         db.close()

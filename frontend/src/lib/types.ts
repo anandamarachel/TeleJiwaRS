@@ -21,6 +21,12 @@ export type PaymentInstructions = {
   consultation_status: "screening" | "payment_rejected";
 };
 
+export type ChatMessage = {
+  sender_role: "patient" | "doctor";
+  message: string;
+  sent_at: string;
+};
+
 export type ScreeningQuestion = {
   id: number;
   text: string;

@@ -268,6 +268,12 @@ def get_chat_history(
     if not (is_patient or is_doctor):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
+    if consultation.status != ConsultationStatus.ACTIVE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Chat is only available while the consultation is active",
+        )
+
     rows = (
         db.query(ChatMessage, User)
         .join(User, ChatMessage.sender_user_id == User.id)
