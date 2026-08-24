@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { apiFetch } from "@/lib/api";
 
 type UserInfo = {
   id: number;
