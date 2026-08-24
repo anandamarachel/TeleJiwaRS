@@ -14,6 +14,7 @@ from app.schemas.payment import PaymentQueueItem, PaymentDecisionResponse
 from app.core.security import require_role, get_current_user
 from app.core.config import settings
 from app.models.notification import Notification
+from app.core.phone import normalize_indonesian_phone
 from urllib.parse import quote
 
 router = APIRouter(prefix="/admin/payments", tags=["admin"])
@@ -80,19 +81,32 @@ def approve_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
-    if payment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+    now = datetime.now(timezone.utc)
+    updated_rows = (
+        db.query(Payment)
+        .filter(Payment.id == payment_id, Payment.status == PaymentStatus.PENDING)
+        .update(
+            {
+                "status": PaymentStatus.APPROVED,
+                "verified_at": now,
+                "verified_by_admin_id": current_user.admin.id,
+            },
+            synchronize_session=False,
+        )
+    )
 
-    if payment.status != PaymentStatus.PENDING:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment is not pending")
+    if updated_rows == 0:
+        db.rollback()
+        exists = db.query(Payment.id).filter(Payment.id == payment_id).first()
+        if exists is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment is no longer pending")
+
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
 
     consultation = db.query(Consultation).filter(Consultation.id == payment.consultation_id).first()
     patient = db.query(Patient).filter(Patient.id == consultation.patient_id).first()
 
-    payment.status = PaymentStatus.APPROVED
-    payment.verified_at = datetime.now(timezone.utc)
-    payment.verified_by_admin_id = current_user.admin.id
     consultation.status = ConsultationStatus.READY
 
     message_text = (
@@ -110,7 +124,8 @@ def approve_payment(
     db.commit()
     db.refresh(payment)
 
-    whatsapp_link = f"https://wa.me/{patient.phone_number}?text={quote(message_text)}"
+    phone_number = normalize_indonesian_phone(patient.phone_number)
+    whatsapp_link = f"https://wa.me/{phone_number}?text={quote(message_text)}"
 
     return PaymentDecisionResponse(
         payment_id=payment.id,
@@ -126,18 +141,31 @@ def reject_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
-    if payment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+    now = datetime.now(timezone.utc)
+    updated_rows = (
+        db.query(Payment)
+        .filter(Payment.id == payment_id, Payment.status == PaymentStatus.PENDING)
+        .update(
+            {
+                "status": PaymentStatus.REJECTED,
+                "verified_at": now,
+                "verified_by_admin_id": current_user.admin.id,
+            },
+            synchronize_session=False,
+        )
+    )
 
-    if payment.status != PaymentStatus.PENDING:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payment is not pending")
+    if updated_rows == 0:
+        db.rollback()
+        exists = db.query(Payment.id).filter(Payment.id == payment_id).first()
+        if exists is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Payment is no longer pending")
+
+    payment = db.query(Payment).filter(Payment.id == payment_id).first()
 
     consultation = db.query(Consultation).filter(Consultation.id == payment.consultation_id).first()
 
-    payment.status = PaymentStatus.REJECTED
-    payment.verified_at = datetime.now(timezone.utc)
-    payment.verified_by_admin_id = current_user.admin.id
     consultation.status = ConsultationStatus.PAYMENT_REJECTED
 
     db.commit()

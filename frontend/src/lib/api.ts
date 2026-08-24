@@ -55,3 +55,20 @@ export async function apiFetch<T>(
 
   return response.json();
 }
+
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const response = await fetch(`${API_URL}${path}`, { credentials: "include" });
+
+  if (!response.ok) {
+    let detail = "File tidak dapat dimuat.";
+    try {
+      const errorBody = await response.json();
+      detail = errorBody.detail ?? detail;
+    } catch {
+      // Keep the default message for non-JSON failures.
+    }
+    throw new ApiError(response.status, detail);
+  }
+
+  return response.blob();
+}

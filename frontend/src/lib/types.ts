@@ -70,6 +70,21 @@ export type DoctorConsultation = {
   started_at: string | null;
 };
 
+export type PendingPayment = {
+  payment_id: number;
+  consultation_id: number;
+  patient_name: string;
+  amount: string;
+  uploaded_at: string;
+};
+
+export type PaymentDecision = {
+  payment_id: number;
+  status: "approved" | "rejected";
+  verified_at: string;
+  whatsapp_link: string | null;
+};
+
 export type ScreeningQuestion = {
   id: number;
   text: string;
