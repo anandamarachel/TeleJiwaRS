@@ -52,6 +52,24 @@ export type ConsultationDetail = {
   completed_at: string | null;
 };
 
+export type DoctorQueueItem = {
+  consultation_id: number;
+  patient_name: string;
+  screening_score: number;
+  screening_result: string;
+  ready_since: string;
+};
+
+export type DoctorConsultation = {
+  id: number;
+  status: ConsultationStatus;
+  patient_name: string;
+  chief_complaint: string;
+  screening_score: number;
+  screening_result: string;
+  started_at: string | null;
+};
+
 export type ScreeningQuestion = {
   id: number;
   text: string;
