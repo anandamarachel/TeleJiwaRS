@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from pydantic import field_validator
 from app.core.phone import normalize_indonesian_phone
 
@@ -18,11 +18,10 @@ class PatientRegisterRequest(BaseModel):
 
 
 class PatientResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: str
     full_name: str
     phone_number: str
     created_at: datetime
-
-    class Config:
-        from_attributes = True
