@@ -16,6 +16,9 @@ class PaymentInstructionsResponse(BaseModel):
     consultation_id: int
     amount: Decimal
     consultation_status: str
+    bank_name: str
+    bank_account_number: str
+    bank_account_holder: str
 
 
 class PaymentQueueItem(BaseModel):

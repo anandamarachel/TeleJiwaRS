@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.consultation import Consultation, ConsultationStatus
+from app.models.chat_message import ChatMessage
 from app.models.payment import Payment, PaymentStatus
 
 
@@ -26,7 +29,7 @@ def prepare_pending_payment(client, users, auth_as, isolated_uploads):
     assert submit_screening(client, consultation_id).status_code == 201
     uploaded = client.post(
         f"/consultations/{consultation_id}/payment",
-        files={"file": ("proof.png", b"valid test image bytes", "image/png")},
+        files={"file": ("proof.png", b"\x89PNG\r\n\x1a\nvalid test image bytes", "image/png")},
     )
     assert uploaded.status_code == 201
     return consultation_id, uploaded.json()["id"]
@@ -50,6 +53,9 @@ def test_screening_summary_routes_patient_to_payment(client, users, auth_as):
     instructions = client.get(f"/consultations/{consultation_id}/payment-instructions")
     assert instructions.status_code == 200
     assert instructions.json()["amount"] == "150000.00"
+    assert instructions.json()["bank_name"] == "BCA"
+    assert instructions.json()["bank_account_number"] == "124232034"
+    assert instructions.json()["bank_account_holder"] == "Rumah Sakit TeleJiwa"
 
 
 def test_duplicate_active_consultation_is_blocked(client, users, auth_as):
@@ -72,7 +78,7 @@ def test_rejected_payment_can_be_uploaded_again(client, db_session, users, auth_
     auth_as(users.patient)
     retried = client.post(
         f"/consultations/{consultation_id}/payment",
-        files={"file": ("retry.pdf", b"valid test pdf bytes", "application/pdf")},
+        files={"file": ("retry.pdf", b"%PDF-1.7 valid test pdf bytes", "application/pdf")},
     )
     assert retried.status_code == 201
 
@@ -142,3 +148,36 @@ def test_full_consultation_lifecycle_and_terminal_chat_access(
 
     consultation = db_session.query(Consultation).filter(Consultation.id == consultation_id).one()
     assert consultation.status == ConsultationStatus.COMPLETED
+
+
+def test_chat_history_uses_stable_message_id_order(client, db_session, users, auth_as):
+    consultation = Consultation(
+        patient_id=users.patient.patient.id,
+        doctor_id=users.doctor.doctor.id,
+        status=ConsultationStatus.ACTIVE,
+    )
+    db_session.add(consultation)
+    db_session.flush()
+
+    now = datetime.now(timezone.utc)
+    first = ChatMessage(
+        consultation_id=consultation.id,
+        sender_user_id=users.patient.id,
+        message_text="first",
+        sent_at=now,
+    )
+    second = ChatMessage(
+        consultation_id=consultation.id,
+        sender_user_id=users.doctor.id,
+        message_text="second",
+        sent_at=now - timedelta(minutes=1),
+    )
+    db_session.add_all([first, second])
+    db_session.commit()
+
+    auth_as(users.patient)
+    response = client.get(f"/consultations/{consultation.id}/messages")
+
+    assert response.status_code == 200
+    assert [message["id"] for message in response.json()] == [first.id, second.id]
+    assert [message["message"] for message in response.json()] == ["first", "second"]

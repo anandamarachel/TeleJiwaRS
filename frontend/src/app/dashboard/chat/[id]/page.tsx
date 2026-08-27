@@ -3,8 +3,10 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { RequireAuth } from "@/components/RequireAuth";
-import { apiFetch, getWebSocketUrl } from "@/lib/api";
-import { ChatMessage, ConsultationStatus } from "@/lib/types";
+import { ChatEmojiPicker } from "@/components/ChatEmojiPicker";
+import { apiFetch, ApiError, getWebSocketUrl } from "@/lib/api";
+import { applyReadReceipt, mergeChatMessages, unreadIncomingIds } from "@/lib/chat";
+import { ChatMessage, ChatReadReceipt, ConsultationStatus } from "@/lib/types";
 
 type ConsultationDetail = {
   id: number;
@@ -29,6 +31,8 @@ function PatientChat() {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shouldReconnectRef = useRef(true);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const pendingReceiptsRef = useRef(new Map<number, string>());
+  const messagesRef = useRef<ChatMessage[]>([]);
 
   const [consultation, setConsultation] = useState<ConsultationDetail | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -70,9 +74,32 @@ function PatientChat() {
     async function loadHistory() {
       try {
         const history = await apiFetch<ChatMessage[]>(`/consultations/${id}/messages`);
-        if (!disposed) setMessages((current) => mergeMessages(current, history));
-      } catch {
-        if (!disposed) setError("Gagal memuat riwayat pesan.");
+        if (!disposed) {
+          setMessages((current) => mergeChatMessages(current, history, pendingReceiptsRef.current));
+          markAsRead(history);
+        }
+      } catch (err) {
+        if (!disposed) {
+          setError(
+            err instanceof ApiError
+              ? `Gagal memuat riwayat pesan (${err.status}): ${err.detail}`
+              : "Gagal memuat riwayat pesan. Pastikan backend dapat diakses.",
+          );
+        }
+      }
+    }
+
+    function markAsRead(rows: ChatMessage[]) {
+      const socket = socketRef.current;
+      if (
+        document.visibilityState !== "visible" ||
+        !socket ||
+        socket.readyState !== WebSocket.OPEN
+      ) return;
+
+      const messageIds = unreadIncomingIds(rows, "patient");
+      if (messageIds.length > 0) {
+        socket.send(JSON.stringify({ type: "read", message_ids: messageIds }));
       }
     }
 
@@ -92,17 +119,36 @@ function PatientChat() {
 
       socket.onmessage = (event) => {
         try {
-          const message = JSON.parse(event.data) as ChatMessage;
-          setMessages((current) => mergeMessages(current, [message]));
+          const payload = JSON.parse(event.data) as ChatMessage | ChatReadReceipt;
+          if (payload.type === "read") {
+            for (const messageId of payload.message_ids) {
+              pendingReceiptsRef.current.set(messageId, payload.read_at);
+            }
+            setMessages((current) => applyReadReceipt(current, payload));
+            return;
+          }
+
+          const message = payload as ChatMessage;
+          setMessages((current) => mergeChatMessages(current, [message], pendingReceiptsRef.current));
+          if (message.sender_role !== "patient") markAsRead([message]);
         } catch {
           setError("Pesan baru tidak dapat dibaca.");
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         if (socketRef.current === socket) socketRef.current = null;
         if (disposed || !shouldReconnectRef.current) return;
         setConnectionStatus("disconnected");
+        if (event.code === 1008 || event.code === 1009) {
+          shouldReconnectRef.current = false;
+          setError(
+            event.reason
+              ? `Koneksi chat ditolak: ${event.reason}`
+              : "Koneksi chat ditolak. Silakan masuk kembali dan buka konsultasi aktif.",
+          );
+          return;
+        }
         reconnectTimerRef.current = setTimeout(connect, 2000);
       };
 
@@ -111,6 +157,13 @@ function PatientChat() {
 
     loadHistory();
     connect();
+
+    function markVisibleMessagesRead() {
+      if (document.visibilityState === "visible") {
+        markAsRead(messagesRef.current);
+      }
+    }
+    document.addEventListener("visibilitychange", markVisibleMessagesRead);
 
     const statusTimer = setInterval(async () => {
       try {
@@ -129,6 +182,7 @@ function PatientChat() {
       disposed = true;
       shouldReconnectRef.current = false;
       clearInterval(statusTimer);
+      document.removeEventListener("visibilitychange", markVisibleMessagesRead);
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       socketRef.current?.close();
       socketRef.current = null;
@@ -136,6 +190,7 @@ function PatientChat() {
   }, [consultation, id, router]);
 
   useEffect(() => {
+    messagesRef.current = messages;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -176,7 +231,7 @@ function PatientChat() {
           )}
 
           {messages.map((message, index) => (
-            <MessageBubble key={`${message.sent_at}-${message.sender_role}-${index}`} message={message} />
+            <MessageBubble key={message.id ?? index} message={message} />
           ))}
           <div ref={messagesEndRef} />
         </div>
@@ -184,6 +239,10 @@ function PatientChat() {
         {error && <p className="px-4 text-xs text-red-600" role="alert">{error}</p>}
 
         <form onSubmit={sendMessage} className="flex gap-2 border-t border-sage-200 p-4">
+          <ChatEmojiPicker
+            disabled={connectionStatus !== "connected"}
+            onSelect={(emoji) => setDraft((value) => `${value}${emoji}`)}
+          />
           <label htmlFor="chat-message" className="sr-only">Pesan</label>
           <input
             id="chat-message"
@@ -215,7 +274,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       <div className={`max-w-[82%] rounded-2xl px-4 py-2.5 ${isPatient ? "bg-jade-500 text-white" : "bg-sage-100 text-ink-900"}`}>
         <p className="whitespace-pre-wrap break-words text-sm">{message.message}</p>
         <p className={`mt-1 text-[10px] ${isPatient ? "text-white/70" : "text-ink-700/60"}`}>
-          {new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit" }).format(new Date(message.sent_at))}
+          {formatTime(message.sent_at)}
+          {isPatient && ` · ${message.read_at ? `Dibaca ${formatTime(message.read_at)}` : "Terkirim"}`}
         </p>
       </div>
     </div>
@@ -231,15 +291,8 @@ function ConnectionBadge({ status }: { status: ConnectionStatus }) {
   );
 }
 
-function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]) {
-  const messages = new Map<string, ChatMessage>();
-  for (const message of [...current, ...incoming]) {
-    const key = `${message.sender_role}\u0000${message.sent_at}\u0000${message.message}`;
-    messages.set(key, message);
-  }
-  return [...messages.values()].sort(
-    (a, b) => new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
-  );
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
 function StateMessage({ text, isError = false }: { text: string; isError?: boolean }) {

@@ -134,6 +134,18 @@ def submit_screening(
 
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "application/pdf"}
 MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+FILE_SIGNATURES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png", ".png"),
+    (b"\xff\xd8\xff", "image/jpeg", ".jpg"),
+    (b"%PDF-", "application/pdf", ".pdf"),
+)
+
+
+def detect_payment_proof_type(header: bytes) -> tuple[str, str] | None:
+    for signature, content_type, extension in FILE_SIGNATURES:
+        if header.startswith(signature):
+            return content_type, extension
+    return None
 
 
 @router.get("/{consultation_id}/payment-instructions", response_model=PaymentInstructionsResponse)
@@ -166,6 +178,9 @@ def get_payment_instructions(
         consultation_id=consultation.id,
         amount=settings.consultation_fee,
         consultation_status=consultation.status.value,
+        bank_name=settings.payment_bank_name,
+        bank_account_number=settings.payment_bank_account_number,
+        bank_account_holder=settings.payment_bank_account_holder,
     )
 
 
@@ -202,18 +217,39 @@ async def upload_payment_proof(
             detail="File must be a JPEG, PNG, or PDF",
         )
 
-    contents = await file.read()
-    if len(contents) > MAX_FILE_SIZE_BYTES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File too large (max 5MB)")
+    first_chunk = await file.read(1024 * 1024)
+    detected = detect_payment_proof_type(first_chunk[:16])
+    if detected is None or detected[0] != file.content_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File contents do not match a valid JPEG, PNG, or PDF",
+        )
 
-    extension = os.path.splitext(file.filename)[1]
+    _, extension = detected
     unique_filename = f"{uuid.uuid4().hex}{extension}"
     relative_path = os.path.join("payment_proofs", str(consultation_id), unique_filename)
     absolute_path = os.path.join(settings.upload_dir, relative_path)
 
     os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
-    with open(absolute_path, "wb") as f:
-        f.write(contents)
+    total_size = 0
+    try:
+        with open(absolute_path, "wb") as destination:
+            chunk = first_chunk
+            while chunk:
+                total_size += len(chunk)
+                if total_size > MAX_FILE_SIZE_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="File too large (max 5MB)",
+                    )
+                destination.write(chunk)
+                chunk = await file.read(1024 * 1024)
+    except Exception:
+        if os.path.exists(absolute_path):
+            os.remove(absolute_path)
+        raise
+    finally:
+        await file.close()
 
     payment = Payment(
         consultation_id=consultation.id,
@@ -278,11 +314,17 @@ def get_chat_history(
         db.query(ChatMessage, User)
         .join(User, ChatMessage.sender_user_id == User.id)
         .filter(ChatMessage.consultation_id == consultation_id)
-        .order_by(ChatMessage.sent_at.asc())
+        .order_by(ChatMessage.id.asc())
         .all()
     )
 
     return [
-        ChatMessageResponse(sender_role=user.role.value, message=msg.message_text, sent_at=msg.sent_at)
+        ChatMessageResponse(
+            id=msg.id,
+            sender_role=user.role.value,
+            message=msg.message_text,
+            sent_at=msg.sent_at,
+            read_at=msg.read_at,
+        )
         for msg, user in rows
     ]

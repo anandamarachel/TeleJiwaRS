@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.consultation import Consultation, ConsultationStatus
+from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.screening import Screening
-from app.schemas.doctor_consultation import QueueItem, ConsultationDetail
+from app.schemas.doctor_consultation import ConsultationDetail, PublicDoctorProfile, QueueItem
 from app.core.security import require_role
 from app.models.consultation_note import ConsultationNote
 from app.models.prescription import Prescription, PrescriptionItem
@@ -18,6 +19,25 @@ from app.schemas.end_consultation import EndConsultationRequest, EndConsultation
 
 
 router = APIRouter(prefix="/doctors", tags=["doctors"])
+
+
+@router.get("/public", response_model=list[PublicDoctorProfile])
+def list_public_doctors(db: Session = Depends(get_db)):
+    doctors = (
+        db.query(Doctor)
+        .join(User, Doctor.user_id == User.id)
+        .filter(User.is_active.is_(True))
+        .order_by(Doctor.full_name.asc())
+        .all()
+    )
+    return [
+        PublicDoctorProfile(
+            id=doctor.id,
+            full_name=doctor.full_name,
+            specialization=doctor.specialization,
+        )
+        for doctor in doctors
+    ]
 
 
 @router.get("/queue", response_model=list[QueueItem])

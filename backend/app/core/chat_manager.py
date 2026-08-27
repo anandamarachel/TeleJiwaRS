@@ -1,4 +1,4 @@
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 
 class ConnectionManager:
@@ -17,8 +17,15 @@ class ConnectionManager:
             self.active_connections.pop(consultation_id, None)
 
     async def broadcast(self, consultation_id: int, message: dict):
-        for connection in self.active_connections.get(consultation_id, []):
-            await connection.send_json(message)
+        stale_connections: list[WebSocket] = []
+        for connection in list(self.active_connections.get(consultation_id, [])):
+            try:
+                await connection.send_json(message)
+            except (RuntimeError, WebSocketDisconnect):
+                stale_connections.append(connection)
+
+        for connection in stale_connections:
+            self.disconnect(consultation_id, connection)
 
 
 manager = ConnectionManager()

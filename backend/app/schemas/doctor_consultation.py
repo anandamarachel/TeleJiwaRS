@@ -3,6 +3,12 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class PublicDoctorProfile(BaseModel):
+    id: int
+    full_name: str
+    specialization: str | None
+
+
 class QueueItem(BaseModel):
     consultation_id: int
     patient_name: str

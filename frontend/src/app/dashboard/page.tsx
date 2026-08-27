@@ -26,10 +26,53 @@ function DashboardContent() {
   const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {
-    apiFetch<ConsultationSummary[]>("/patients/consultations")
-      .then(setConsultations)
-      .catch(() => setError("Gagal memuat data konsultasi."));
-  }, []);
+    let cancelled = false;
+    let requestInFlight = false;
+    let hasLoaded = false;
+
+    function refreshConsultations() {
+      if (cancelled || requestInFlight || document.visibilityState === "hidden") return;
+      requestInFlight = true;
+
+      apiFetch<ConsultationSummary[]>("/patients/consultations")
+        .then((rows) => {
+          if (cancelled) return;
+
+          hasLoaded = true;
+          setConsultations(rows);
+          setError(null);
+
+          const activeConsultation = rows.find((consultation) => consultation.status === "active");
+          if (activeConsultation) {
+            router.replace(`/dashboard/chat/${activeConsultation.id}`);
+          }
+        })
+        .catch(() => {
+          if (!cancelled && !hasLoaded) {
+            setError("Gagal memuat data konsultasi.");
+          }
+        })
+        .finally(() => {
+          requestInFlight = false;
+        });
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === "visible") refreshConsultations();
+    }
+
+    refreshConsultations();
+    const interval = window.setInterval(refreshConsultations, 3000);
+    window.addEventListener("focus", refreshConsultations);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshConsultations);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [router]);
 
   async function handleStartConsultation() {
     setIsStarting(true);
@@ -62,7 +105,12 @@ function DashboardContent() {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-1 flex-col gap-6 px-4 py-10">
       <div className="flex items-center justify-between">
-        <p className="text-lg font-semibold text-ink-900">Telemedicine Jiwa</p>
+        <div>
+          <p className="text-lg font-semibold text-ink-900">Telemedicine Jiwa</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink-700/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-jade-500" /> Status diperbarui otomatis
+          </p>
+        </div>
         <button onClick={handleLogout} className="text-sm text-ink-700/70 hover:text-ink-900">
           Keluar
         </button>

@@ -42,3 +42,19 @@ def test_inactive_user_cookie_is_rejected(client, db_session, users, auth_as):
     response = client.get("/auth/me")
 
     assert response.status_code == 401
+
+
+def test_public_doctor_profiles_only_include_active_doctors(client, db_session, users):
+    users.other_doctor.is_active = False
+    db_session.commit()
+
+    response = client.get("/doctors/public")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": users.doctor.doctor.id,
+            "full_name": "Dr. Satu",
+            "specialization": None,
+        }
+    ]

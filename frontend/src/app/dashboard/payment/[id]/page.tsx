@@ -24,6 +24,7 @@ function PaymentContent() {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [accountCopied, setAccountCopied] = useState(false);
 
   useEffect(() => {
     apiFetch<PaymentInstructions>(`/consultations/${id}/payment-instructions`)
@@ -76,6 +77,12 @@ function PaymentContent() {
     }
   }
 
+  async function copyAccountNumber() {
+    await navigator.clipboard.writeText(instructions?.bank_account_number ?? "");
+    setAccountCopied(true);
+    window.setTimeout(() => setAccountCopied(false), 2000);
+  }
+
   if (!instructions && !error) {
     return <StateMessage text="Memuat..." />;
   }
@@ -111,9 +118,34 @@ function PaymentContent() {
         <p className="mt-1 text-2xl font-semibold text-ink-900">
           {formatRupiah(instructions.amount)}
         </p>
-        <p className="mt-3 text-xs text-ink-700/70">
-          Gunakan instruksi rekening atau pembayaran resmi yang diberikan oleh rumah sakit.
+        <p className="mt-3 text-sm leading-6 text-ink-700/70">
+          Silakan transfer sesuai total pembayaran ke rekening resmi rumah sakit berikut. Pastikan nama penerima sudah sesuai sebelum melanjutkan.
         </p>
+
+        <dl className="mt-5 divide-y divide-sage-100 rounded-xl bg-sage-50 px-4">
+          <PaymentDetail label="Bank" value={instructions.bank_name} />
+          <div className="flex items-center justify-between gap-4 py-3">
+            <div>
+              <dt className="text-xs text-ink-700/60">Nomor rekening</dt>
+              <dd className="mt-0.5 font-semibold tracking-wide text-ink-900">{instructions.bank_account_number}</dd>
+            </div>
+            <button
+              type="button"
+              onClick={copyAccountNumber}
+              className="shrink-0 rounded-lg border border-sage-200 bg-white px-3 py-1.5 text-xs font-medium text-jade-700 hover:border-jade-500"
+            >
+              {accountCopied ? "Tersalin" : "Salin"}
+            </button>
+          </div>
+          <PaymentDetail label="Atas nama" value={instructions.bank_account_holder} />
+        </dl>
+
+        <div className="mt-5 rounded-xl border border-clay-400/40 bg-clay-400/10 p-4">
+          <p className="text-sm font-medium text-ink-900">Setelah melakukan transfer</p>
+          <p className="mt-1 text-xs leading-5 text-ink-700/70">
+            Simpan bukti transaksi, lalu unggah melalui formulir di bawah. Pastikan nominal, rekening tujuan, dan status transaksi terlihat jelas.
+          </p>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-sage-200 bg-white p-6">
@@ -151,6 +183,15 @@ function formatRupiah(amount: string) {
     currency: "IDR",
     maximumFractionDigits: 0,
   }).format(Number(amount));
+}
+
+function PaymentDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="py-3">
+      <dt className="text-xs text-ink-700/60">{label}</dt>
+      <dd className="mt-0.5 text-sm font-medium text-ink-900">{value}</dd>
+    </div>
+  );
 }
 
 function StateMessage({ text }: { text: string }) {

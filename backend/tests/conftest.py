@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.security import create_access_token, hash_password
+from app.core.rate_limit import rate_limiter
+from app.api.chat import websocket_rate_limiter
 from app.database import Base, get_db
 from app.main import app
 from app.models.admin import Admin
@@ -24,6 +26,15 @@ class TestUsers:
     doctor: User
     other_doctor: User
     admin: User
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiters():
+    rate_limiter.clear()
+    websocket_rate_limiter.clear()
+    yield
+    rate_limiter.clear()
+    websocket_rate_limiter.clear()
 
 
 @pytest.fixture

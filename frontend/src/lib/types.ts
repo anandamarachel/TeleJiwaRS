@@ -19,12 +19,24 @@ export type PaymentInstructions = {
   consultation_id: number;
   amount: string;
   consultation_status: "screening" | "payment_rejected";
+  bank_name: string;
+  bank_account_number: string;
+  bank_account_holder: string;
 };
 
 export type ChatMessage = {
+  type?: "message";
+  id: number;
   sender_role: "patient" | "doctor";
   message: string;
   sent_at: string;
+  read_at: string | null;
+};
+
+export type ChatReadReceipt = {
+  type: "read";
+  message_ids: number[];
+  read_at: string;
 };
 
 export type PrescriptionItem = {
@@ -58,6 +70,12 @@ export type DoctorQueueItem = {
   screening_score: number;
   screening_result: string;
   ready_since: string;
+};
+
+export type PublicDoctorProfile = {
+  id: number;
+  full_name: string;
+  specialization: string | null;
 };
 
 export type DoctorConsultation = {
