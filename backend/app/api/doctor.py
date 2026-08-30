@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
+from pathlib import Path
+import os
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -9,8 +13,14 @@ from app.models.consultation import Consultation, ConsultationStatus
 from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.screening import Screening
-from app.schemas.doctor_consultation import ConsultationDetail, PublicDoctorProfile, QueueItem
-from app.core.security import require_role
+from app.schemas.doctor_consultation import (
+    AdminDoctorProfile,
+    ConsultationDetail,
+    PublicDoctorProfile,
+    QueueItem,
+)
+from app.core.security import require_role, require_super_admin
+from app.core.config import settings
 from app.models.consultation_note import ConsultationNote
 from app.models.prescription import Prescription, PrescriptionItem
 from app.models.follow_up import FollowUp
@@ -20,9 +30,42 @@ from app.schemas.end_consultation import EndConsultationRequest, EndConsultation
 
 router = APIRouter(prefix="/doctors", tags=["doctors"])
 
+DOCTOR_PHOTO_MAX_BYTES = 2 * 1024 * 1024
+DOCTOR_PHOTO_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+
+
+def _detect_doctor_photo(header: bytes) -> tuple[str, str] | None:
+    if header.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg", ".jpg"
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png", ".png"
+    if len(header) >= 12 and header.startswith(b"RIFF") and header[8:12] == b"WEBP":
+        return "image/webp", ".webp"
+    return None
+
+
+def _photo_url(request: Request, doctor: Doctor) -> str | None:
+    if not doctor.photo_file_path:
+        return None
+    return str(request.url_for("get_doctor_photo", doctor_id=doctor.id)) + f"?v={Path(doctor.photo_file_path).stem}"
+
+
+def _photo_absolute_path(relative_path: str) -> Path:
+    upload_root = Path(settings.upload_dir).resolve()
+    path = (upload_root / relative_path).resolve()
+    try:
+        path.relative_to(upload_root)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor photo not found") from error
+    return path
+
 
 @router.get("/public", response_model=list[PublicDoctorProfile])
-def list_public_doctors(db: Session = Depends(get_db)):
+def list_public_doctors(request: Request, db: Session = Depends(get_db)):
     doctors = (
         db.query(Doctor)
         .join(User, Doctor.user_id == User.id)
@@ -35,9 +78,124 @@ def list_public_doctors(db: Session = Depends(get_db)):
             id=doctor.id,
             full_name=doctor.full_name,
             specialization=doctor.specialization,
+            photo_url=_photo_url(request, doctor),
         )
         for doctor in doctors
     ]
+
+
+@router.get("/manage", response_model=list[AdminDoctorProfile])
+def list_doctors_for_admin(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    doctors = db.query(Doctor).join(User, Doctor.user_id == User.id).order_by(Doctor.full_name.asc()).all()
+    return [
+        AdminDoctorProfile(
+            id=doctor.id,
+            full_name=doctor.full_name,
+            specialization=doctor.specialization,
+            photo_url=_photo_url(request, doctor),
+            email=doctor.user.email,
+            license_number=doctor.license_number,
+            is_active=doctor.user.is_active,
+        )
+        for doctor in doctors
+    ]
+
+
+@router.post("/manage/{doctor_id}/photo", response_model=AdminDoctorProfile)
+async def upload_doctor_photo(
+    doctor_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if doctor is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
+    if file.content_type not in DOCTOR_PHOTO_TYPES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Foto harus berupa JPEG, PNG, atau WebP")
+
+    first_chunk = await file.read(1024 * 1024)
+    detected = _detect_doctor_photo(first_chunk[:16])
+    if detected is None or detected[0] != file.content_type:
+        await file.close()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Isi file tidak cocok dengan format gambar yang valid")
+
+    _, extension = detected
+    relative_path = os.path.join("doctor_profiles", str(doctor.id), f"{uuid.uuid4().hex}{extension}")
+    absolute_path = _photo_absolute_path(relative_path)
+    absolute_path.parent.mkdir(parents=True, exist_ok=True)
+    total_size = 0
+    try:
+        with absolute_path.open("wb") as destination:
+            chunk = first_chunk
+            while chunk:
+                total_size += len(chunk)
+                if total_size > DOCTOR_PHOTO_MAX_BYTES:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Ukuran foto maksimal 2 MB")
+                destination.write(chunk)
+                chunk = await file.read(1024 * 1024)
+    except Exception:
+        absolute_path.unlink(missing_ok=True)
+        raise
+    finally:
+        await file.close()
+
+    old_photo_path = doctor.photo_file_path
+    doctor.photo_file_path = relative_path
+    try:
+        db.commit()
+        db.refresh(doctor)
+    except Exception:
+        db.rollback()
+        absolute_path.unlink(missing_ok=True)
+        raise
+
+    if old_photo_path:
+        _photo_absolute_path(old_photo_path).unlink(missing_ok=True)
+
+    return AdminDoctorProfile(
+        id=doctor.id,
+        full_name=doctor.full_name,
+        specialization=doctor.specialization,
+        photo_url=_photo_url(request, doctor),
+        email=doctor.user.email,
+        license_number=doctor.license_number,
+        is_active=doctor.user.is_active,
+    )
+
+
+@router.delete("/manage/{doctor_id}/photo", status_code=status.HTTP_204_NO_CONTENT)
+def delete_doctor_photo(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+):
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if doctor is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found")
+
+    old_photo_path = doctor.photo_file_path
+    doctor.photo_file_path = None
+    db.commit()
+    if old_photo_path:
+        _photo_absolute_path(old_photo_path).unlink(missing_ok=True)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{doctor_id}/photo", name="get_doctor_photo")
+def get_doctor_photo(doctor_id: int, db: Session = Depends(get_db)):
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if doctor is None or not doctor.photo_file_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor photo not found")
+    absolute_path = _photo_absolute_path(doctor.photo_file_path)
+    if not absolute_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor photo not found")
+    return FileResponse(absolute_path, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/queue", response_model=list[QueueItem])

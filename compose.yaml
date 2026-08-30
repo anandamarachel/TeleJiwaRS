@@ -12,5 +12,7 @@ services:
     volumes:
       - tj_pgdata:/var/lib/postgresql/data
 
+    
+
 volumes:
   tj_pgdata:

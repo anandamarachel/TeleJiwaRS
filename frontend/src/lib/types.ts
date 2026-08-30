@@ -11,6 +11,8 @@ export type ConsultationSummary = {
   status: ConsultationStatus;
   screening_submitted: boolean;
   doctor_name: string | null;
+  payment_rejection_reason: string | null;
+  payment_rejection_note: string | null;
   created_at: string;
   completed_at: string | null;
 };
@@ -76,6 +78,13 @@ export type PublicDoctorProfile = {
   id: number;
   full_name: string;
   specialization: string | null;
+  photo_url: string | null;
+};
+
+export type AdminDoctorProfile = PublicDoctorProfile & {
+  email: string;
+  license_number: string;
+  is_active: boolean;
 };
 
 export type DoctorConsultation = {
@@ -101,6 +110,37 @@ export type PaymentDecision = {
   status: "approved" | "rejected";
   verified_at: string;
   whatsapp_link: string | null;
+  rejection_reason: string | null;
+  rejection_note: string | null;
+};
+
+export type PaymentRejectionReason =
+  | "proof_unreadable"
+  | "amount_mismatch"
+  | "wrong_destination"
+  | "incomplete_information"
+  | "payment_not_found"
+  | "other";
+
+export type PaymentHistoryItem = {
+  payment_id: number;
+  consultation_id: number;
+  patient_name: string;
+  patient_nik: string | null;
+  amount: string;
+  status: "approved" | "rejected";
+  uploaded_at: string;
+  verified_at: string;
+  verified_by: string | null;
+  rejection_reason: string | null;
+  rejection_note: string | null;
+};
+
+export type PaymentHistoryResponse = {
+  items: PaymentHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 export type ScreeningQuestion = {

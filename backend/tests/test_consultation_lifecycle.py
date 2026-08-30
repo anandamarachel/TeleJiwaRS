@@ -71,11 +71,23 @@ def test_rejected_payment_can_be_uploaded_again(client, db_session, users, auth_
     consultation_id, payment_id = prepare_pending_payment(client, users, auth_as, isolated_uploads)
 
     auth_as(users.admin)
-    rejected = client.post(f"/admin/payments/{payment_id}/reject")
+    rejected = client.post(
+        f"/admin/payments/{payment_id}/reject",
+        json={
+            "reason": "proof_unreadable",
+            "note": "Mohon unggah foto yang lebih jelas.",
+        },
+    )
     assert rejected.status_code == 200
-    assert rejected.json()["whatsapp_link"] is None
+    assert rejected.json()["rejection_reason"] == "Bukti pembayaran tidak terbaca"
+    assert rejected.json()["rejection_note"] == "Mohon unggah foto yang lebih jelas."
+    assert rejected.json()["whatsapp_link"].startswith("https://wa.me/628")
 
     auth_as(users.patient)
+    summary = client.get("/patients/consultations").json()[0]
+    assert summary["payment_rejection_reason"] == "Bukti pembayaran tidak terbaca"
+    assert summary["payment_rejection_note"] == "Mohon unggah foto yang lebih jelas."
+
     retried = client.post(
         f"/consultations/{consultation_id}/payment",
         files={"file": ("retry.pdf", b"%PDF-1.7 valid test pdf bytes", "application/pdf")},
@@ -84,6 +96,21 @@ def test_rejected_payment_can_be_uploaded_again(client, db_session, users, auth_
 
     payments = db_session.query(Payment).filter(Payment.consultation_id == consultation_id).all()
     assert [payment.status for payment in payments] == [PaymentStatus.REJECTED, PaymentStatus.PENDING]
+    assert payments[0].rejection_reason_code == "proof_unreadable"
+
+
+def test_payment_rejection_requires_a_valid_reason(client, users, auth_as, isolated_uploads):
+    _, payment_id = prepare_pending_payment(client, users, auth_as, isolated_uploads)
+    auth_as(users.admin)
+
+    missing_reason = client.post(f"/admin/payments/{payment_id}/reject", json={})
+    assert missing_reason.status_code == 422
+
+    other_without_note = client.post(
+        f"/admin/payments/{payment_id}/reject",
+        json={"reason": "other"},
+    )
+    assert other_without_note.status_code == 422
 
 
 def test_full_consultation_lifecycle_and_terminal_chat_access(

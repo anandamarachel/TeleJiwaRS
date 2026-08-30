@@ -89,7 +89,7 @@ function DashboardContent() {
 
   async function handleLogout() {
     await logout();
-    router.push("/");
+    router.replace("/");
   }
 
   if (error) {
@@ -111,9 +111,14 @@ function DashboardContent() {
             <span className="h-1.5 w-1.5 rounded-full bg-jade-500" /> Status diperbarui otomatis
           </p>
         </div>
-        <button onClick={handleLogout} className="text-sm text-ink-700/70 hover:text-ink-900">
-          Keluar
-        </button>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/profile" className="text-sm text-ink-700/70 hover:text-ink-900">
+            Profil
+          </Link>
+          <button onClick={handleLogout} className="text-sm text-ink-700/70 hover:text-ink-900">
+            Keluar
+          </button>
+        </div>
       </div>
 
       {activeConsultation ? (
@@ -136,9 +141,11 @@ function DashboardContent() {
       {consultations.some((c) => c.status === "completed") && (
         <Link
           href="/dashboard/history"
-          className="text-center text-sm font-medium text-jade-700 hover:underline"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-jade-500 bg-white px-5 py-3 text-sm font-semibold text-jade-700 shadow-sm transition hover:bg-jade-500/5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade-500 focus-visible:ring-offset-2"
         >
+          <span aria-hidden="true">◷</span>
           Lihat Riwayat Konsultasi
+          <span aria-hidden="true">→</span>
         </Link>
       )}
     </div>

@@ -8,6 +8,8 @@ class ConsultationSummary(BaseModel):
     status: str
     screening_submitted: bool
     doctor_name: str | None
+    payment_rejection_reason: str | None = None
+    payment_rejection_note: str | None = None
     created_at: datetime
     completed_at: datetime | None
 

@@ -76,15 +76,24 @@ function ActionForStatus({ consultation }: { consultation: ConsultationSummary }
       );
     case "payment_rejected":
       return (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm text-red-600">
-            Pembayaran Anda ditolak. Silakan unggah ulang bukti pembayaran.
-          </p>
+        <div className="flex flex-col gap-3">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+            <p className="text-sm font-semibold text-red-700">Pembayaran belum dapat diverifikasi</p>
+            <p className="mt-2 text-xs font-medium uppercase tracking-wide text-ink-700/60">Alasan penolakan</p>
+            <p className="mt-1 text-sm text-ink-900">
+              {consultation.payment_rejection_reason ?? "Silakan hubungi admin untuk informasi lebih lanjut."}
+            </p>
+            {consultation.payment_rejection_note && (
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink-700/75">
+                {consultation.payment_rejection_note}
+              </p>
+            )}
+          </div>
           <Link
             href={`/dashboard/payment/${consultation.id}`}
             className="block w-full rounded-lg bg-jade-500 py-2.5 text-center text-sm font-medium text-white hover:bg-jade-600"
           >
-            Unggah Ulang
+            Unggah Ulang Bukti Pembayaran
           </Link>
         </div>
       );

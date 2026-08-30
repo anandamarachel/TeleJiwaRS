@@ -7,6 +7,13 @@ class PublicDoctorProfile(BaseModel):
     id: int
     full_name: str
     specialization: str | None
+    photo_url: str | None
+
+
+class AdminDoctorProfile(PublicDoctorProfile):
+    email: str
+    license_number: str
+    is_active: bool
 
 
 class QueueItem(BaseModel):

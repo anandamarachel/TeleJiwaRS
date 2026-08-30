@@ -64,7 +64,7 @@ function DoctorQueue() {
 
   async function handleLogout() {
     await logout();
-    router.push("/");
+    router.replace("/");
   }
 
   const isLoading = queue === null || mine === null;

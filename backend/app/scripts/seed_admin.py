@@ -27,7 +27,7 @@ def seed_admin(email: str, password: str, full_name: str):
         db.add(user)
         db.flush()
 
-        admin = Admin(user_id=user.id, full_name=full_name)
+        admin = Admin(user_id=user.id, full_name=full_name, is_super_admin=True)
         db.add(admin)
         db.commit()
 

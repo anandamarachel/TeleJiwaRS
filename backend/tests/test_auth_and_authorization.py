@@ -56,5 +56,6 @@ def test_public_doctor_profiles_only_include_active_doctors(client, db_session, 
             "id": users.doctor.doctor.id,
             "full_name": "Dr. Satu",
             "specialization": None,
+            "photo_url": None,
         }
     ]

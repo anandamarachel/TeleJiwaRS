@@ -13,6 +13,7 @@ class Doctor(Base):
     full_name = Column(String(255), nullable=False)
     license_number = Column(String(100), nullable=False, unique=True)
     specialization = Column(String(255), nullable=True)
+    photo_file_path = Column(String(500), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     user = relationship("User", back_populates="doctor")

@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Text, Numeric, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -24,6 +24,8 @@ class Payment(Base):
     uploaded_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     verified_at = Column(DateTime(timezone=True), nullable=True)
     verified_by_admin_id = Column(Integer, ForeignKey("admins.id"), nullable=True)
+    rejection_reason_code = Column(String(50), nullable=True)
+    rejection_note = Column(Text, nullable=True)
 
     consultation = relationship("Consultation", back_populates="payments")
     verified_by = relationship("Admin")

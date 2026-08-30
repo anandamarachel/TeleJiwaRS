@@ -39,6 +39,7 @@ class SensitiveEndpointRateLimitMiddleware(BaseHTTPMiddleware):
     RULES = {
         ("POST", "/auth/login"): (5, 60),
         ("POST", "/patients/register"): (5, 3600),
+        ("DELETE", "/patients/me"): (5, 3600),
     }
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:

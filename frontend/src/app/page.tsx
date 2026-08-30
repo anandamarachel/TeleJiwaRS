@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch } from "@/lib/api";
@@ -125,7 +126,11 @@ export default function HomePage() {
             {!doctorsLoading && doctors.map((doctor) => (
               <article key={doctor.id} className="rounded-2xl border border-sage-200 bg-white p-6 shadow-sm">
                 <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-jade-500/10 text-base font-semibold text-jade-700">{getInitials(doctor.full_name)}</div>
+                  {doctor.photo_url ? (
+                    <Image src={doctor.photo_url} alt={`Foto ${doctor.full_name}`} width={56} height={56} className="h-14 w-14 shrink-0 rounded-2xl object-cover" />
+                  ) : (
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-jade-500/10 text-base font-semibold text-jade-700">{getInitials(doctor.full_name)}</div>
+                  )}
                   <div><h3 className="font-semibold text-ink-900">{doctor.full_name}</h3><p className="mt-1 text-sm text-ink-700/65">{doctor.specialization || "Dokter Telemedicine Jiwa"}</p></div>
                 </div>
                 <div className="mt-6 flex items-center gap-2 border-t border-sage-100 pt-4 text-xs text-ink-700/60"><span className="h-2 w-2 rounded-full bg-jade-500" /> Terdaftar sebagai dokter aktif</div>

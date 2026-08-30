@@ -32,7 +32,12 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
         path="/",
     )
 
-    return UserInfoResponse(id=user.id, email=user.email, role=user.role.value)
+    return UserInfoResponse(
+        id=user.id,
+        email=user.email,
+        role=user.role.value,
+        is_super_admin=bool(user.admin and user.admin.is_super_admin),
+    )
 
 @router.post("/logout")
 def logout(response: Response):
@@ -41,4 +46,9 @@ def logout(response: Response):
 
 @router.get("/me", response_model=UserInfoResponse)
 def get_me(current_user: User = Depends(get_current_user)):
-    return UserInfoResponse(id=current_user.id, email=current_user.email, role=current_user.role.value)
+    return UserInfoResponse(
+        id=current_user.id,
+        email=current_user.email,
+        role=current_user.role.value,
+        is_super_admin=bool(current_user.admin and current_user.admin.is_super_admin),
+    )

@@ -10,3 +10,4 @@ class UserInfoResponse(BaseModel):
     id: int
     email: str
     role: str
+    is_super_admin: bool = False

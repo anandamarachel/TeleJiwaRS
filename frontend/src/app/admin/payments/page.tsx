@@ -7,7 +7,16 @@ import { useRouter } from "next/navigation";
 import { RequireAuth } from "@/components/RequireAuth";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiFetch, apiFetchBlob, ApiError } from "@/lib/api";
-import { PaymentDecision, PendingPayment } from "@/lib/types";
+import { PaymentDecision, PaymentRejectionReason, PendingPayment } from "@/lib/types";
+
+const rejectionReasons: { value: PaymentRejectionReason; label: string }[] = [
+  { value: "proof_unreadable", label: "Bukti pembayaran tidak terbaca" },
+  { value: "amount_mismatch", label: "Nominal pembayaran tidak sesuai" },
+  { value: "wrong_destination", label: "Rekening tujuan tidak sesuai" },
+  { value: "incomplete_information", label: "Informasi transaksi tidak lengkap" },
+  { value: "payment_not_found", label: "Pembayaran belum ditemukan" },
+  { value: "other", label: "Alasan lainnya" },
+];
 
 export default function AdminPaymentsPage() {
   return (
@@ -19,7 +28,7 @@ export default function AdminPaymentsPage() {
 
 function AdminPayments() {
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const [payments, setPayments] = useState<PendingPayment[] | null>(null);
   const [selected, setSelected] = useState<PendingPayment | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -27,6 +36,9 @@ function AdminPayments() {
   const [loadingProof, setLoadingProof] = useState(false);
   const [deciding, setDeciding] = useState<"approve" | "reject" | null>(null);
   const [decision, setDecision] = useState<PaymentDecision | null>(null);
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState<PaymentRejectionReason | "">("");
+  const [rejectionNote, setRejectionNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const loadPayments = useCallback(async () => {
@@ -57,6 +69,9 @@ function AdminPayments() {
     setProofUrl(null);
     setProofType(null);
     setDecision(null);
+    setShowRejectForm(false);
+    setRejectionReason("");
+    setRejectionNote("");
     setError(null);
     setLoadingProof(true);
     try {
@@ -72,10 +87,23 @@ function AdminPayments() {
 
   async function decide(action: "approve" | "reject") {
     if (!selected) return;
+    if (action === "reject" && !rejectionReason) {
+      setError("Pilih alasan penolakan pembayaran.");
+      return;
+    }
+    if (action === "reject" && rejectionReason === "other" && !rejectionNote.trim()) {
+      setError("Isi catatan tambahan untuk alasan lainnya.");
+      return;
+    }
     setDeciding(action);
     setError(null);
     try {
-      const result = await apiFetch<PaymentDecision>(`/admin/payments/${selected.payment_id}/${action}`, { method: "POST" });
+      const result = await apiFetch<PaymentDecision>(`/admin/payments/${selected.payment_id}/${action}`, {
+        method: "POST",
+        ...(action === "reject"
+          ? { body: JSON.stringify({ reason: rejectionReason, note: rejectionNote }) }
+          : {}),
+      });
       setDecision(result);
       setPayments((rows) => rows?.filter((payment) => payment.payment_id !== selected.payment_id) ?? []);
     } catch (err) {
@@ -88,7 +116,7 @@ function AdminPayments() {
 
   async function handleLogout() {
     await logout();
-    router.push("/");
+    router.replace("/");
   }
 
   return (
@@ -99,7 +127,8 @@ function AdminPayments() {
           <p className="text-sm text-ink-700/70">Tinjau bukti sebelum menyetujui atau menolak pembayaran.</p>
         </div>
         <div className="flex items-center gap-4">
-          <Link href="/admin/staff" className="text-sm font-medium text-jade-700 hover:underline">Kelola staf</Link>
+          <Link href="/admin/payment-history" className="text-sm font-medium text-jade-700 hover:underline">Riwayat pembayaran</Link>
+          {user?.is_super_admin && <Link href="/admin/staff" className="text-sm font-medium text-jade-700 hover:underline">Kelola staf</Link>}
           <button onClick={handleLogout} className="text-sm text-ink-700/70 hover:text-ink-900">Keluar</button>
         </div>
       </header>
@@ -154,11 +183,47 @@ function AdminPayments() {
               {decision ? (
                 <div className={`rounded-xl p-4 ${decision.status === "approved" ? "bg-jade-500/10" : "bg-clay-400/20"}`}>
                   <p className="text-sm font-medium text-ink-900">Pembayaran {decision.status === "approved" ? "disetujui" : "ditolak"}.</p>
+                  {decision.rejection_reason && (
+                    <p className="mt-2 text-sm text-ink-700/75">
+                      <span className="font-medium text-ink-900">Alasan:</span> {decision.rejection_reason}
+                    </p>
+                  )}
+                  {decision.rejection_note && <p className="mt-1 whitespace-pre-wrap text-sm text-ink-700/75">{decision.rejection_note}</p>}
                   {decision.whatsapp_link && <a href={decision.whatsapp_link} target="_blank" rel="noreferrer" className="mt-3 inline-block rounded-lg bg-jade-500 px-4 py-2 text-sm font-medium text-white">Buka WhatsApp</a>}
+                </div>
+              ) : showRejectForm ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+                  <h3 className="text-sm font-semibold text-ink-900">Alasan Penolakan</h3>
+                  <p className="mt-1 text-xs leading-5 text-ink-700/65">Alasan ini akan ditampilkan kepada pasien dan digunakan dalam pesan WhatsApp.</p>
+                  <label htmlFor="rejection-reason" className="mt-4 block text-sm font-medium text-ink-900">Pilih alasan <span className="text-red-600">*</span></label>
+                  <select
+                    id="rejection-reason"
+                    value={rejectionReason}
+                    onChange={(event) => setRejectionReason(event.target.value as PaymentRejectionReason | "")}
+                    className="mt-1.5 w-full rounded-lg border border-sage-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-jade-500"
+                  >
+                    <option value="">Pilih alasan penolakan</option>
+                    {rejectionReasons.map((reason) => <option key={reason.value} value={reason.value}>{reason.label}</option>)}
+                  </select>
+                  <label htmlFor="rejection-note" className="mt-4 block text-sm font-medium text-ink-900">Catatan tambahan <span className="font-normal text-ink-700/60">(opsional)</span></label>
+                  <textarea
+                    id="rejection-note"
+                    value={rejectionNote}
+                    onChange={(event) => setRejectionNote(event.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="Contoh: Mohon unggah foto yang menampilkan tanggal dan nominal transaksi."
+                    className="mt-1.5 w-full resize-y rounded-lg border border-sage-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-jade-500"
+                  />
+                  <p className="mt-1 text-right text-xs text-ink-700/50">{rejectionNote.length}/500</p>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <button type="button" onClick={() => { setShowRejectForm(false); setError(null); }} disabled={deciding !== null} className="rounded-lg border border-sage-200 bg-white py-2.5 text-sm font-medium text-ink-900 disabled:opacity-40">Batal</button>
+                    <button type="button" onClick={() => decide("reject")} disabled={deciding !== null || !rejectionReason || (rejectionReason === "other" && !rejectionNote.trim())} className="rounded-lg bg-red-700 py-2.5 text-sm font-medium text-white disabled:opacity-40">{deciding === "reject" ? "Menolak..." : "Tolak Pembayaran"}</button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  <button onClick={() => decide("reject")} disabled={deciding !== null || !proofUrl} className="rounded-lg border border-red-300 py-2.5 text-sm font-medium text-red-600 disabled:opacity-40">{deciding === "reject" ? "Menolak..." : "Tolak"}</button>
+                  <button onClick={() => setShowRejectForm(true)} disabled={deciding !== null || !proofUrl} className="rounded-lg border border-red-300 py-2.5 text-sm font-medium text-red-600 disabled:opacity-40">Tolak</button>
                   <button onClick={() => decide("approve")} disabled={deciding !== null || !proofUrl} className="rounded-lg bg-jade-500 py-2.5 text-sm font-medium text-white disabled:opacity-40">{deciding === "approve" ? "Menyetujui..." : "Setujui"}</button>
                 </div>
               )}

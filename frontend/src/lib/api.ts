@@ -21,6 +21,31 @@ export class ApiError extends Error {
   }
 }
 
+function getErrorDetail(errorBody: unknown, fallback: string): string {
+  if (!errorBody || typeof errorBody !== "object" || !("detail" in errorBody)) {
+    return fallback;
+  }
+
+  const detail = errorBody.detail;
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item && typeof item.msg === "string") {
+          return item.msg;
+        }
+        return null;
+      })
+      .filter((message): message is string => message !== null);
+
+    if (messages.length > 0) return messages.join(". ");
+  }
+
+  return fallback;
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
@@ -41,8 +66,8 @@ export async function apiFetch<T>(
   if (!response.ok) {
     let detail = "Terjadi kesalahan. Silakan coba lagi.";
     try {
-      const errorBody = await response.json();
-      detail = errorBody.detail ?? detail;
+      const errorBody: unknown = await response.json();
+      detail = getErrorDetail(errorBody, detail);
     } catch {
       // response body wasn't JSON, keep the default message
     }
@@ -62,8 +87,8 @@ export async function apiFetchBlob(path: string): Promise<Blob> {
   if (!response.ok) {
     let detail = "File tidak dapat dimuat.";
     try {
-      const errorBody = await response.json();
-      detail = errorBody.detail ?? detail;
+      const errorBody: unknown = await response.json();
+      detail = getErrorDetail(errorBody, detail);
     } catch {
       // Keep the default message for non-JSON failures.
     }

@@ -10,3 +10,4 @@ from app.models.prescription import Prescription, PrescriptionItem
 from app.models.follow_up import FollowUp
 from app.models.referral import Referral
 from app.models.notification import Notification, NotificationStatus
+from app.models.patient_profile_change import PatientProfileChange

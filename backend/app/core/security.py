@@ -85,4 +85,14 @@ def require_role(*allowed_roles: UserRole):
     return role_checker
 
 
+def require_super_admin(
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+) -> User:
+    if current_user.admin is None or not current_user.admin.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Hanya Admin Utama yang dapat mengelola staf",
+        )
+    return current_user
+
 

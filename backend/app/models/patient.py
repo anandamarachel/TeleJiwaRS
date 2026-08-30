@@ -12,6 +12,7 @@ class Patient(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
     full_name = Column(String(255), nullable=False)
     phone_number = Column(String(20), nullable=False, unique=True)
+    nik = Column(String(16), nullable=True, unique=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     user = relationship("User", back_populates="patient")

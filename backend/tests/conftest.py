@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -6,6 +7,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+os.environ["ALLOWED_HOSTS"] = "localhost,127.0.0.1,testserver"
+os.environ["CORS_ORIGINS"] = "http://localhost:3000"
 
 from app.core.security import create_access_token, hash_password
 from app.core.rate_limit import rate_limiter
@@ -74,7 +78,7 @@ def db_session():
 
 @pytest.fixture
 def client(db_session: Session):
-    with TestClient(app) as test_client:
+    with TestClient(app, base_url="http://localhost") as test_client:
         yield test_client
 
 
@@ -95,7 +99,7 @@ def users(db_session: Session) -> TestUsers:
         Patient(user_id=other_patient_user.id, full_name="Pasien Dua", phone_number="628222222222"),
         Doctor(user_id=doctor_user.id, full_name="Dr. Satu", license_number="SIP-001"),
         Doctor(user_id=other_doctor_user.id, full_name="Dr. Dua", license_number="SIP-002"),
-        Admin(user_id=admin_user.id, full_name="Admin Satu"),
+        Admin(user_id=admin_user.id, full_name="Admin Satu", is_super_admin=True),
         ScreeningQuestion(text="Minat atau kesenangan berkurang?", order_index=1, is_active=True),
         ScreeningQuestion(text="Merasa sedih atau putus asa?", order_index=2, is_active=True),
     ])

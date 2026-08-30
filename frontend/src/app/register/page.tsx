@@ -14,16 +14,18 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [nik, setNik] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   async function handleSubmit(e: SyntheticEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!fullName || !email || !phoneNumber || !password || !confirmPassword) {
+    if (!fullName || !email || !phoneNumber || !nik || !password || !confirmPassword) {
       setError("Semua kolom wajib diisi.");
       return;
     }
@@ -31,11 +33,20 @@ export default function RegisterPage() {
       setError("Kata sandi minimal 8 karakter.");
       return;
     }
+    if (!/^\d{16}$/.test(nik)) {
+      setError("NIK harus terdiri dari 16 digit angka.");
+      return;
+    }
     if (password !== confirmPassword) {
       setError("Konfirmasi kata sandi tidak cocok.");
       return;
     }
 
+    setShowConfirmation(true);
+  }
+
+  async function submitRegistration() {
+    setShowConfirmation(false);
     setIsSubmitting(true);
     try {
       await apiFetch("/patients/register", {
@@ -45,6 +56,7 @@ export default function RegisterPage() {
           password,
           full_name: fullName,
           phone_number: phoneNumber,
+          nik,
         }),
       });
 
@@ -104,8 +116,32 @@ export default function RegisterPage() {
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
               placeholder="08123456789"
+              aria-describedby="phoneNumber-help"
               className={inputClass}
             />
+            <p id="phoneNumber-help" className="text-xs leading-5 text-jade-700">
+              Gunakan nomor WhatsApp yang aktif agar Anda dapat menerima informasi terkait konsultasi.
+            </p>
+          </Field>
+
+          <Field label="Nomor Induk Kependudukan (NIK)" id="nik">
+            <input
+              id="nik"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              value={nik}
+              onChange={(e) => setNik(e.target.value.replace(/\D/g, "").slice(0, 16))}
+              placeholder="16 digit NIK sesuai KTP"
+              minLength={16}
+              maxLength={16}
+              pattern="[0-9]{16}"
+              aria-describedby="nik-help"
+              className={inputClass}
+            />
+            <p id="nik-help" className="text-xs leading-5 text-ink-700/60">
+              Digunakan untuk keperluan administrasi rumah sakit. Pastikan sesuai dengan KTP.
+            </p>
           </Field>
 
           <Field label="Kata sandi" id="password">
@@ -152,6 +188,42 @@ export default function RegisterPage() {
           </Link>
         </p>
       </div>
+
+      {showConfirmation && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="registration-confirmation-title"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h2 id="registration-confirmation-title" className="text-lg font-semibold text-ink-900">
+              Pastikan data Anda sudah benar
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-ink-700/80">
+              Periksa kembali nama lengkap, NIK, email, dan nomor WhatsApp. Data tersebut akan digunakan
+              untuk akun serta administrasi konsultasi Anda.
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowConfirmation(false)}
+                className="rounded-lg border border-sage-200 px-4 py-2 text-sm font-medium text-ink-900 transition hover:bg-sage-50"
+              >
+                Periksa Kembali
+              </button>
+              <button
+                type="button"
+                onClick={submitRegistration}
+                className="rounded-lg bg-jade-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-jade-600"
+              >
+                Data Sudah Benar, Daftar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
